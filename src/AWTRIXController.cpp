@@ -30,10 +30,10 @@
 
 #include "MenueControl/MenueControl.h"
 
-// instantiate temp sensor
-BME280<> BMESensor;
-Adafruit_BMP280 BMPSensor; // use I2C interface
-Adafruit_HTU21DF htu = Adafruit_HTU21DF();
+// instantiate temp sensor 3个选一个
+BME280<> BMESensor; // 温湿度大气压传感器
+Adafruit_BMP280 BMPSensor; // use I2C interface  //温度大气压传感器
+Adafruit_HTU21DF htu = Adafruit_HTU21DF();  // 温湿度传感器
 
 enum MsgType
 {
@@ -53,30 +53,31 @@ enum TempSensor
 	TempSensor_BMP280
 }; // None = 0
 
+ // 传感器类型
 TempSensor tempState = TempSensor_None;
 
-int ldrState = 1000;		// 0 = None
-bool USBConnection = false; // true = usb...
-bool WIFIConnection = false;
-bool notify=false;
-int connectionTimout;
-int matrixTempCorrection = 0;
+int ldrState = 1000;		// 0 = None 光敏电阻亮度
+bool USBConnection = false; // usb连接关闭
+bool WIFIConnection = false; //wifi连接关闭
+bool notify=false; //通知关闭
+int connectionTimout; // 连接超时时间
+int matrixTempCorrection = 0; // 矩阵矫正
 
 String version = "0.43";
 char awtrix_server[16] = "0.0.0.0";
 char Port[6] = "7001"; // AWTRIX Host Port, default = 7001
-int matrixType = 0;
+int matrixType = 0; // 矩阵类型
 
 IPAddress Server;
 WiFiClient espClient;
-PubSubClient client(espClient);
+PubSubClient client(espClient); //消息队列
 
 WiFiManager wifiManager;
 
 MenueControl myMenue;
 
 //update
-ESP8266WebServer server(80);
+ESP8266WebServer server(80); //设置esp硬件服务
 const char *serverIndex = "<form method='POST' action='/update' enctype='multipart/form-data'><input type='file' name='update'><input type='submit' value='Update'></form>";
 
 //resetdetector
@@ -124,7 +125,7 @@ int bufferpointer;
 //Zum speichern...
 int cfgStart = 0;
 
-//flag for saving data
+//flag for saving data 是否保存配置文件
 bool shouldSaveConfig = false;
 
 /// LDR Config
@@ -546,6 +547,7 @@ void hardwareAnimatedCheck(MsgType typ, int x, int y)
 	}
 }
 
+// 屏幕打印 Host ->》
 void serverSearch(int rounds, int typ, int x, int y)
 {
 	matrix->clear();
@@ -1208,6 +1210,7 @@ void handleGesture()
 	}
 }
 
+// 返回颜色 小到大 绿 蓝 红
 uint32_t Wheel(byte WheelPos, int pos)
 {
 	if (WheelPos < 85)
@@ -1226,6 +1229,7 @@ uint32_t Wheel(byte WheelPos, int pos)
 	}
 }
 
+// 屏幕显示进度
 void flashProgress(unsigned int progress, unsigned int total)
 {
 	matrix->setBrightness(80);
@@ -1244,6 +1248,7 @@ void flashProgress(unsigned int progress, unsigned int total)
 	matrix->show();
 }
 
+// 设置esp的web配置文件保存时的回调
 void saveConfigCallback()
 {
 	if (!USBConnection)
@@ -1253,6 +1258,7 @@ void saveConfigCallback()
 	shouldSaveConfig = true;
 }
 
+// 进入esp 配置时的回调
 void configModeCallback(WiFiManager *myWiFiManager)
 {
 
@@ -1269,43 +1275,58 @@ void configModeCallback(WiFiManager *myWiFiManager)
 	matrix->show();
 }
 
+// 初始化设置
 void setup()
 {
 	delay(2000);
 
+	// 设置 D0,D4,D8 输入上拉
 	for (int i = 0; i < tasterCount; i++)
 	{
 		pinMode(tasterPin[i], INPUT_PULLUP);
 	}
 
+	// 设置串口接收缓存
 	Serial.setRxBufferSize(1024);
+	// 设置波特率
 	Serial.begin(115200);
+	// 指定软串口波特率
 	mySoftwareSerial.begin(9600);
 
+	// 启动文件系统并判是否启动成功
 	if (LittleFS.begin())
 	{
-		//if file not exists
+		//if file not exists 文件不存在创建文件
 		if (!(LittleFS.exists("/awtrix.json")))
 		{
 			LittleFS.open("/awtrix.json", "w+");
 		}
-
+		// 读取文件
 		File configFile = LittleFS.open("/awtrix.json", "r");
+		// 文件不为空
 		if (configFile)
 		{
+			// 获取文件大小
 			size_t size = configFile.size();
-			// Allocate a buffer to store contents of the file.
+			// Allocate a buffer to store contents of the file. 分配一个缓冲区来存储文件的内容
+			// 创建一个名称为buf的智能指针数组
 			std::unique_ptr<char[]> buf(new char[size]);
+			// 将文件读取到 buf 缓存中
 			configFile.readBytes(buf.get(), size);
+			// Arduino 处理 JSON 数据
 			DynamicJsonBuffer jsonBuffer;
+			// 将 buf 缓存中的数据转为 json 对象
 			JsonObject &json = jsonBuffer.parseObject(buf.get());
+			// json 是否有值
 			if (json.success())
 			{
-
+				// 将 awtrix_server 中的数据替换为 json["awtrix_server"] 中的数据
 				strcpy(awtrix_server, json["awtrix_server"]);
 
+				// json 中是否包含 matrixType
 				if (json.containsKey("matrixType"))
 				{
+					// 转为 int 类型
 					matrixType = json["matrixType"].as<int>();
 				}
 
@@ -1325,6 +1346,7 @@ void setup()
 	}
 	Serial.println("matrixType");
 	Serial.println(matrixType);
+	// 设置像素的排列顺序 参数：灯珠数量 宽像素点 高像素点 排列参数
 	switch (matrixType)
 	{
 	case 0:
@@ -1411,22 +1433,25 @@ void setup()
 		break;
 	}
 
-	matrix->begin();
-	matrix->setTextWrap(false);
-	matrix->setBrightness(30);
-	matrix->setFont(&TomThumb);
+	matrix->begin(); // 启动
+	matrix->setTextWrap(false); // 关闭文本包装
+	matrix->setBrightness(30); //设置亮度
+	matrix->setFont(&TomThumb); //设置字体
 	//Reset with Tasters...
+	// 此函数返回自程序启动以来的毫秒数
 	int zeit = millis();
 	int zahl = 5;
 	int zahlAlt = 6;
-	matrix->clear();
-	matrix->setTextColor(matrix->Color(255, 0, 255));
-	matrix->setCursor(9, 6);
+	matrix->clear(); //关闭屏幕显示
+	matrix->setTextColor(matrix->Color(255, 0, 255)); //设置字体颜色为粉红色
+	matrix->setCursor(9, 6); //设置光标位置
 	matrix->print("BOOT");
-	matrix->show();
+	matrix->show(); //显示
 	delay(2000);
+	// 当 D4 脚电平为低电平
 	while (!digitalRead(D4))
 	{
+		// 显示长按5秒重置倒计时
 		if (zahl != zahlAlt)
 		{
 			matrix->clear();
@@ -1438,6 +1463,7 @@ void setup()
 			zahlAlt = zahl;
 		}
 		zahl = 5 - ((millis() - zeit) / 1000);
+		// 重置
 		if (zahl == 0)
 		{
 			matrix->clear();
@@ -1446,15 +1472,20 @@ void setup()
 			matrix->print("RESET!");
 			matrix->show();
 			delay(1000);
+			// 启动文件系统并判是否启动成功
 			if (LittleFS.begin())
 			{
 				delay(1000);
+				// 删除 文件系统中的 /awtrix.json
 				LittleFS.remove("/awtrix.json");
 
+				// 此方法卸载文件系统。在使用OTA更新文件系统之前，请使用此方法。
 				LittleFS.end();
 				delay(1000);
 			}
+			// 清除ESP8266所存储的WiFi连接信息以便测试WiFiManager工作效果
 			wifiManager.resetSettings();
+			// 重置esp
 			ESP.reset();
 		}
 	}
@@ -1480,8 +1511,9 @@ void setup()
 			ESP.reset();
 		}
 		*/
-
+	// 设置esp的固定AP信息 参数：（ip，网关，掩码）
 	wifiManager.setAPStaticIPConfig(IPAddress(172, 217, 28, 1), IPAddress(172, 217, 28, 1), IPAddress(255, 255, 255, 0));
+	// 用户 esp web 界面可以设置的 AWTRIX Host， Matrix Port， MatrixType 
 	WiFiManagerParameter custom_awtrix_server("server", "AWTRIX Host", awtrix_server, 16);
 	WiFiManagerParameter custom_port("Port", "Matrix Port", Port, 6);
 	WiFiManagerParameter custom_matrix_type("matrixType", "MatrixType", "0", 1);
@@ -1491,9 +1523,12 @@ void setup()
 	WiFiManagerParameter matrix_hint("<small>0: Columns; 1: Tiles; 2: Rows <br></small><br><br>");
 	WiFiManagerParameter p_lineBreak_notext("<p></p>");
 
+	// 设置保存配置的回调
 	wifiManager.setSaveConfigCallback(saveConfigCallback);
+	// 设置AP的回调
 	wifiManager.setAPCallback(configModeCallback);
 
+	// web 页面展示
 	wifiManager.addParameter(&p_lineBreak_notext);
 	wifiManager.addParameter(&host_hint);
 	wifiManager.addParameter(&custom_awtrix_server);
@@ -1503,20 +1538,23 @@ void setup()
 	wifiManager.addParameter(&custom_matrix_type);
 	wifiManager.addParameter(&p_lineBreak_notext);
 
+	// 设置web头
 	//wifiManager.setCustomHeadElement("<style>html{ background-color: #607D8B;}</style>");
 
+	// 屏幕上显示 wifi ->》
 	hardwareAnimatedSearch(0, 24, 0);
 
+	// esp自动连接之前连过的wifi,连接失败则,自己开启热点名称密码如下
 	if (!wifiManager.autoConnect("AWTRIX Controller", "awtrixxx"))
 	{
 		//reset and try again, or maybe put it to deep sleep
 		ESP.reset();
 		delay(5000);
 	}
-
 	//is needed for only one hotpsot!
 	WiFi.mode(WIFI_STA);
 
+	// 设置esp硬件服务接收到访问的处理方式
 	server.on("/", HTTP_GET, []() {
 		server.sendHeader("Connection", "close");
 		server.send(200, "text/html", serverIndex);
@@ -1535,20 +1573,23 @@ void setup()
       ESP.restart(); }, []() {
       HTTPUpload& upload = server.upload();
 
-      if (upload.status == UPLOAD_FILE_START) {
+      if (upload.status == UPLOAD_FILE_START) { //上传文件开始
+	  	// 串口上传文件会导致 调试打印失效 需手动开启
         Serial.setDebugOutput(true);
 
+		// ESP.getFreeSketchSpace()以无符号32位整数的形式返回可用空闲固件空间；
         uint32_t maxSketchSpace = (ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000;
+		// 空间是否够用
         if (!Update.begin(maxSketchSpace)) { //start with max available size
           Update.printError(Serial);
         }
-      } else if (upload.status == UPLOAD_FILE_WRITE) {
+      } else if (upload.status == UPLOAD_FILE_WRITE) { //上传文件中
 		  matrix->clear();
 		  flashProgress((int)upload.currentSize,(int)upload.buf);
         if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
           Update.printError(Serial);
         }
-      } else if (upload.status == UPLOAD_FILE_END) {
+      } else if (upload.status == UPLOAD_FILE_END) { //上传文件结束
         if (Update.end(true)) { //true to set the size to the current progress
 		  server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
 
@@ -1558,30 +1599,33 @@ void setup()
         }
         Serial.setDebugOutput(false);
       }
-      yield(); });
-
+      yield(); }); //此函数放弃cpu优先调度
+	// 启动esp硬件的web服务
 	server.begin();
 
+	// 如果保存了web配置文件
 	if (shouldSaveConfig)
 	{
-
+		// 获取web中的数据
 		strcpy(awtrix_server, custom_awtrix_server.getValue());
 		matrixType =  atoi(custom_matrix_type.getValue());
 		strcpy(Port, custom_port.getValue());
 		saveConfig();
 		ESP.reset();
 	}
-
+	// 打印对应的 模块名称和 √ 号
 	hardwareAnimatedCheck(MsgType_Wifi, 27, 2);
 
 	delay(1000); //is needed for the dfplayer to startup
 
-	//Checking periphery
+	//Checking periphery 初始化 IIC
 	Wire.begin(I2C_SDA, I2C_SCL);
+	// 判断使用的是哪种传感器
 	if (BMESensor.begin())
 	{
-		//temp OK
+		//temp OK 保存传感器类型
 		tempState = TempSensor_BME280;
+		// 打印对应的 模块名称和 √ 号
 		hardwareAnimatedCheck(MsgType_Temp, 29, 2);
 	}
 	else if (htu.begin())
@@ -1601,37 +1645,45 @@ void setup()
 		tempState = TempSensor_BMP280;
 		hardwareAnimatedCheck(MsgType_Temp, 29, 2);
 	}
-
+	// 启动 MP3
 	dfmp3.begin();
 
 	if (0)
 	{ //Use softwareSerial to communicate with mp3.
 		hardwareAnimatedCheck(MsgType_Audio, 29, 2);
 	}
-
+	// 中断函数 （中断源，中断执行函数，中断触发电平信号） 手势传感器中断
 	attachInterrupt(APDS9960_INT, interruptRoutine, FALLING);
+	// 使能手势传感器
 	apds.enableGestureSensor(true);
+	// 手势传感器初始化成功
 	if (apds.init())
 	{
+		// 打印
 		hardwareAnimatedCheck(MsgType_Gest, 29, 2);
+		// 设置手势传感器引脚为数据输入型
 		pinMode(APDS9960_INT, INPUT);
 	}
-
+	// 设置光敏电阻是否接地 true接地 false没接地
 	photocell.setPhotocellPositionOnGround(false);
+	// 光照强度大于 l Lux
 	if (photocell.getCurrentLux() > 1)
 	{
+		// 打印
 		hardwareAnimatedCheck(MsgType_LDR, 29, 2);
 	}
-
+	// 设置OAT 开始事件处理函数
 	ArduinoOTA.onStart([&]() {
 		updating = true;
 		matrix->clear();
 	});
 
+	// 设置OAT 事件处理中的函数
 	ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
 		flashProgress(progress, total);
 	});
 
+	// 启动 OAT
 	ArduinoOTA.begin();
 
 	matrix->clear();
@@ -1645,6 +1697,7 @@ void setup()
 	myCounter = 0;
 	myCounter2 = 0;
 
+	// 流动显示 Host-IP 信息
 	for (int x = 32; x >= -90; x--)
 	{
 		matrix->clear();
@@ -1655,20 +1708,26 @@ void setup()
 		delay(40);
 	}
 
+	// 设置消息队列监听的服务
 	client.setServer(awtrix_server, atoi(Port));
+	// 消息队列的回调
 	client.setCallback(callback);
-
+	// 是否忽略远程服务
 	ignoreServer = false;
 
 	connectionTimout = millis();
 }
 
+// 循环执行
 void loop()
 {
+	// esp硬件服务的每次请求都需通过此函数获取
 	server.handleClient();
+	// 获取OTA数据
 	ArduinoOTA.handle();
 
 	//is needed for the server search animation
+	// 第一次启动并且有远程服务
 	if (firstStart && !ignoreServer)
 	{
 		if (millis() - myTime > 500)
@@ -1684,8 +1743,10 @@ void loop()
 	}
 
 	//not during the falsh process
+	// OAT 没有开始处理更新固件中
 	if (!updating)
 	{
+		// USB连接或者首次启动
 		if (USBConnection || firstStart)
 		{
 			int x = 100;
@@ -1693,9 +1754,11 @@ void loop()
 			{
 				x--;
 				//USB
+				// 判断串口缓冲区中剩余数据
 				if (Serial.available() > 0)
 				{
 					//read and fill in ringbuffer
+					// 读取串口缓冲区的数据
 					myBytes[bufferpointer] = Serial.read();
 					messageLength--;
 					for (int i = 0; i < 14; i++)
