@@ -97,7 +97,7 @@ int myCounter2;
 bool ignoreServer = false;
 int menuePointer;
 
-//Taster_mid
+//Taster_mid 3个按钮
 int tasterPin[] = {D0, D4, D8};
 int tasterCount = 3;
 
@@ -240,15 +240,19 @@ void debuggingWithMatrix(String text)
 	matrix->show();
 }
 
+// 发布消息
 void sendToServer(String s)
 {
+	// usb连接上
 	if (USBConnection)
 	{
 		uint32_t laenge = s.length();
+		// 串口打印
 		Serial.printf("%c%c%c%c%s", (laenge & 0xFF000000) >> 24, (laenge & 0x00FF0000) >> 16, (laenge & 0x0000FF00) >> 8, (laenge & 0x000000FF), s.c_str());
 	}
 	else
 	{
+		// 发布消息
 		client.publish("matrixClient", s.c_str());
 	}
 }
@@ -266,6 +270,7 @@ void logToServer(String s)
 
 int checkTaster(int nr)
 {
+	// 读取D0,D4,D8引脚电平存入tasterState
 	tasterState[0] = !digitalRead(tasterPin[0]);
 	tasterState[1] = digitalRead(tasterPin[1]);
 	tasterState[2] = !digitalRead(tasterPin[2]);
@@ -273,28 +278,32 @@ int checkTaster(int nr)
 	switch (nr)
 	{
 	case 0:
-		if (tasterState[0] == LOW && !pushed[nr] && !blockTaster2[nr] && tasterState[1] && tasterState[2])
+		//  D0没按 ，pushed[0] 为fales， blockTaster2[0] 为fales  ，D4没按,D8按下
+		if (tasterState[0] == LOW && !pushed[nr] && !blockTaster2[nr] && tasterState[1] && tasterState[2]) //D8按下
 		{
 			pushed[nr] = true;
 			timeoutTaster[nr] = millis();
 		}
 		break;
 	case 1:
-		if (tasterState[1] == LOW && !pushed[nr] && !blockTaster2[nr] && tasterState[0] && tasterState[2])
+		//  D4按下 ，pushed[1] 为fales， blockTaster2[1] 为fales  ，D0按下,D8按下
+		if (tasterState[1] == LOW && !pushed[nr] && !blockTaster2[nr] && tasterState[0] && tasterState[2]) //都按下
 		{
 			pushed[nr] = true;
 			timeoutTaster[nr] = millis();
 		}
 		break;
 	case 2:
-		if (tasterState[2] == LOW && !pushed[nr] && !blockTaster2[nr] && tasterState[0] && tasterState[1])
+		//  D8没按 ，pushed[2] 为fales， blockTaster2[2] 为fales  ，D0按下,D4没按
+		if (tasterState[2] == LOW && !pushed[nr] && !blockTaster2[nr] && tasterState[0] && tasterState[1]) //D0按下
 		{
 			pushed[nr] = true;
 			timeoutTaster[nr] = millis();
 		}
 		break;
 	case 3:
-		if (tasterState[0] == LOW && tasterState[2] == LOW && !pushed[nr] && !blockTaster2[nr] && tasterState[1])
+		//  D0没按 ，D8没按，!pushed[3] 为fales，blockTaster2[3] 为fales ，D4没按
+		if (tasterState[0] == LOW && tasterState[2] == LOW && !pushed[nr] && !blockTaster2[nr] && tasterState[1]) // 都没按
 		{
 			pushed[nr] = true;
 			timeoutTaster[nr] = millis();
@@ -302,6 +311,7 @@ int checkTaster(int nr)
 		break;
 	}
 
+	// 判断两秒内是否有按键按下
 	if (pushed[nr] && (millis() - timeoutTaster[nr] < 2000) && tasterState[nr] == HIGH)
 	{
 		if (!blockTaster2[nr])
@@ -315,17 +325,17 @@ int checkTaster(int nr)
 			case 0:
 				root["left"] = "short";
 				pressedTaster = 1;
-				//Serial.println("LEFT: normaler Tastendruck");
+				//Serial.println("LEFT: normaler Tastendruck");左
 				break;
 			case 1:
 				root["middle"] = "short";
 				pressedTaster = 2;
-				//Serial.println("MID: normaler Tastendruck");
+				//Serial.println("MID: normaler Tastendruck");中
 				break;
 			case 2:
 				root["right"] = "short";
 				pressedTaster = 3;
-				//Serial.println("RIGHT: normaler Tastendruck");
+				//Serial.println("RIGHT: normaler Tastendruck");右
 				break;
 			}
 
@@ -340,6 +350,7 @@ int checkTaster(int nr)
 		}
 	}
 
+	// 判断是否有按键按下超过2秒
 	if (pushed[nr] && (millis() - timeoutTaster[nr] > 2000))
 	{
 		if (!blockTaster2[nr])
@@ -362,6 +373,7 @@ int checkTaster(int nr)
 				//Serial.println("RIGHT: langer Tastendruck");
 				break;
 			case 3:
+				// 如果为可以尝试发送，则改为不可发送，并设置不需要远程服务用于切换远程与本地模式
 				if (allowTasterSendToServer)
 				{
 					allowTasterSendToServer = false;
@@ -1152,7 +1164,7 @@ void callback(char *topic, byte *payload, unsigned int length)
 	updateMatrix(payload, length);
 }
 
-// 重新连接
+// 重新连接客户端
 void reconnect()
 {
 	//Serial.println("reconnecting to " + String(awtrix_server));
@@ -1179,11 +1191,14 @@ void ICACHE_RAM_ATTR interruptRoutine()
 	isr_flag = 1;
 }
 
+// 手势的处理
 void handleGesture()
 {
 	String control;
+	// 是否有手势
 	if (apds.isGestureAvailable())
 	{
+		// 获取手势的方向
 		switch (apds.readGesture())
 		{
 		case DIR_UP:
@@ -1207,12 +1222,17 @@ void handleGesture()
 		default:
 			control = "NONE";
 		}
+		// 设置json缓存 存储在栈中有固定大小,方法结束自动销毁,内存紧张推荐这样使用
 		StaticJsonBuffer<200> jsonBuffer;
+		// json缓存创建json对象
 		JsonObject &root = jsonBuffer.createObject();
+		// 往json对象中存数据
 		root["type"] = "gesture";
 		root["gesture"] = control;
 		String JS;
+		// 将json转为字符串
 		root.printTo(JS);
+		// 发送JSON字符串
 		sendToServer(JS);
 	}
 }
@@ -1846,13 +1866,15 @@ void loop()
 				client.loop();
 			}
 		}
-		//check gesture sensor 检查手势传感器
+		//check gesture sensor 手势传感器触发
 		if (isr_flag == 1)
 		{
 			// 取消中断
 			detachInterrupt(APDS9960_INT);
+			// 收到手势后发送消息
 			handleGesture();
 			isr_flag = 0;
+			// 开启中断
 			attachInterrupt(APDS9960_INT, interruptRoutine, FALLING);
 		}
 
@@ -1870,6 +1892,7 @@ void loop()
 	//checkTaster(3);
 
 	//is needed for the menue...
+	// 没有开启远程服务则运行
 	if (ignoreServer)
 	{
 		if (pressedTaster > 0)
