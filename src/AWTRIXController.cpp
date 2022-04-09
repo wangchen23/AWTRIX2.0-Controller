@@ -69,7 +69,7 @@ char Port[6] = "7001"; // AWTRIX Host Port, default = 7001
 int matrixType = 0; // 矩阵类型
 
 IPAddress Server;
-WiFiClient espClient;
+WiFiClient espClient; //esp作为客户端处理的库
 PubSubClient client(espClient); //消息队列
 
 WiFiManager wifiManager;
@@ -623,6 +623,7 @@ void serverSearch(int rounds, int typ, int x, int y)
 	matrix->show();
 }
 
+// 屏幕打印
 void hardwareAnimatedSearch(int typ, int x, int y)
 {
 	for (int i = 0; i < 4; i++)
@@ -1151,16 +1152,22 @@ void callback(char *topic, byte *payload, unsigned int length)
 	updateMatrix(payload, length);
 }
 
+// 重新连接
 void reconnect()
 {
 	//Serial.println("reconnecting to " + String(awtrix_server));
+	// 生成随机客户端id
 	String clientId = "AWTRIXController-";
 	clientId += String(random(0xffff), HEX);
+	// 屏幕打印 Host ->》
 	hardwareAnimatedSearch(1, 28, 0);
+	// 创建与客户端的连接成功
 	if (client.connect(clientId.c_str()))
 	{
 		//Serial.println("connected to server!");
+		// 订阅一个或多个 MQTT 主题 并接收消息
 		client.subscribe("awtrixmatrix/#");
+		// 发布消息 参数:主题,内容
 		client.publish("matrixClient", "connected");
 		matrix->fillScreen(matrix->Color(0, 0, 0));
 		matrix->show();
@@ -1758,9 +1765,10 @@ void loop()
 				if (Serial.available() > 0)
 				{
 					//read and fill in ringbuffer
-					// 读取串口缓冲区的数据
-					myBytes[bufferpointer] = Serial.read();
+					// 读取串口缓冲区的数据，每次读取一个int  bufferpointer，messageLength初始值为0 
+					myBytes[bufferpointer] = Serial.read(); //将读取到的数据放入数组myBytes
 					messageLength--;
+					// myPointer大小为14个int       myPointer0=0 myPointer1=999 myPointer2=998 。。。。
 					for (int i = 0; i < 14; i++)
 					{
 						if ((bufferpointer - i) < 0)
@@ -1820,6 +1828,7 @@ void loop()
 		if (WIFIConnection || firstStart)
 		{
 			//Serial.println("wifi oder first...");
+			// 如果esp客户端没有连接
 			if (!client.connected())
 			{
 				//Serial.println("nicht verbunden...");
@@ -1833,12 +1842,14 @@ void loop()
 			}
 			else
 			{
+				// 保持连接
 				client.loop();
 			}
 		}
-		//check gesture sensor
+		//check gesture sensor 检查手势传感器
 		if (isr_flag == 1)
 		{
+			// 取消中断
 			detachInterrupt(APDS9960_INT);
 			handleGesture();
 			isr_flag = 0;
